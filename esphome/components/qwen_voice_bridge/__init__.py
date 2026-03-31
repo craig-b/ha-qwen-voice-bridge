@@ -21,8 +21,8 @@ CONF_ON_ERROR = "on_error"
 
 qwen_voice_bridge_ns = cg.esphome_ns.namespace("qwen_voice_bridge")
 QwenVoiceBridge = qwen_voice_bridge_ns.class_("QwenVoiceBridge", cg.Component)
-StartConversationAction = QwenVoiceBridge.class_(
-    "StartConversationAction", automation.Action
+StartConversationAction = qwen_voice_bridge_ns.class_(
+    "StartConversationAction", automation.Action, cg.Parented.template(QwenVoiceBridge)
 )
 
 CONFIG_SCHEMA = cv.Schema(
@@ -57,7 +57,8 @@ QWEN_VOICE_BRIDGE_START_SCHEMA = cv.Schema(
     QWEN_VOICE_BRIDGE_START_SCHEMA,
 )
 async def start_conversation_action_to_code(config, action_id, template_arg, args):
-    var = cg.new_Pvariable(action_id, template_arg, await cg.get_variable(config[CONF_ID]))
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
     return var
 
 

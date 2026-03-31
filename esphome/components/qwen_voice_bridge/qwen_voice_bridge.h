@@ -59,16 +59,6 @@ class QwenVoiceBridge : public Component {
   Trigger<> *get_conversation_end_trigger() { return &this->conversation_end_trigger_; }
   Trigger<> *get_error_trigger() { return &this->error_trigger_; }
 
-  // Action for YAML automations
-  template<typename... Ts> class StartConversationAction : public Action<Ts...> {
-   public:
-    explicit StartConversationAction(QwenVoiceBridge *parent) : parent_(parent) {}
-    void play(Ts... x) override { this->parent_->request_start(); }
-
-   protected:
-    QwenVoiceBridge *parent_;
-  };
-
  protected:
   void start_conversation_();
   void stop_conversation_(bool error);
@@ -125,6 +115,12 @@ class QwenVoiceBridge : public Component {
   Trigger<> conversation_start_trigger_;
   Trigger<> conversation_end_trigger_;
   Trigger<> error_trigger_;
+};
+
+template<typename... Ts>
+class StartConversationAction : public Action<Ts...>, public Parented<QwenVoiceBridge> {
+ public:
+  void play(Ts... x) override { this->parent_->request_start(); }
 };
 
 }  // namespace qwen_voice_bridge
