@@ -5,7 +5,6 @@ slug: "qwen_voice_bridge"
 url: "https://github.com/craig-b/ha-qwen-voice-bridge"
 arch:
   - amd64
-  - aarch64
 ports:
   9100/tcp: 9100
 ports_description:
