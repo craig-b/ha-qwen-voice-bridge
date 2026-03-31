@@ -30,16 +30,14 @@ void QwenVoiceBridge::setup() {
     }
   });
 
-  // Register wake word callback
-  this->micro_wake_word_->get_wake_word_detected_trigger()->add_on_trigger_callback(
-      [this](const std::string &wake_word) {
-        if (this->state_ == STATE_IDLE) {
-          ESP_LOGI(TAG, "Wake word detected: %s", wake_word.c_str());
-          this->start_conversation_();
-        }
-      });
-
   ESP_LOGI(TAG, "Setup complete, waiting for wake word");
+}
+
+void QwenVoiceBridge::request_start() {
+  if (this->state_ == STATE_IDLE) {
+    ESP_LOGI(TAG, "Wake word detected, starting conversation");
+    this->start_conversation_();
+  }
 }
 
 void QwenVoiceBridge::dump_config() {

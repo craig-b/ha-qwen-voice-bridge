@@ -170,9 +170,9 @@ micro_wake_word:
     - model: hey_mycroft
       id: hey_mycroft
   vad:
-  # NOTE: on_wake_word_detected is intentionally omitted here.
-  # The qwen_voice_bridge component registers its own callback
-  # on the micro_wake_word trigger to start conversations.
+  on_wake_word_detected:
+    - qwen_voice_bridge.start_conversation:
+        id: qwen_bridge
 
 # --- Qwen Voice Bridge ---
 # Replace bridge_host with your Home Assistant IP address.
@@ -186,7 +186,6 @@ qwen_voice_bridge:
     microphone: i2s_mics
     gain_factor: 4
   speaker: announcement_resampling_speaker
-  micro_wake_word: mww
   on_conversation_start:
     - lambda: id(voice_assistant_phase) = ${voice_assist_listening_phase_id};
     - script.execute: control_leds

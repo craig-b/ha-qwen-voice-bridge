@@ -5,7 +5,6 @@
 #include "esphome/core/ring_buffer.h"
 #include "esphome/components/microphone/microphone_source.h"
 #include "esphome/components/speaker/speaker.h"
-#include "esphome/components/micro_wake_word/micro_wake_word.h"
 #include "esphome/components/socket/socket.h"
 
 #include <string>
@@ -53,11 +52,22 @@ class QwenVoiceBridge : public Component {
   void set_satellite_id(const std::string &id) { this->satellite_id_ = id; }
   void set_microphone_source(microphone::MicrophoneSource *source) { this->mic_source_ = source; }
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
-  void set_micro_wake_word(micro_wake_word::MicroWakeWord *mww) { this->micro_wake_word_ = mww; }
+  // Called by the start_conversation action (wired from micro_wake_word YAML)
+  void request_start();
 
   Trigger<> *get_conversation_start_trigger() { return &this->conversation_start_trigger_; }
   Trigger<> *get_conversation_end_trigger() { return &this->conversation_end_trigger_; }
   Trigger<> *get_error_trigger() { return &this->error_trigger_; }
+
+  // Action for YAML automations
+  template<typename... Ts> class StartConversationAction : public Action<Ts...> {
+   public:
+    explicit StartConversationAction(QwenVoiceBridge *parent) : parent_(parent) {}
+    void play(Ts... x) override { this->parent_->request_start(); }
+
+   protected:
+    QwenVoiceBridge *parent_;
+  };
 
  protected:
   void start_conversation_();
@@ -84,8 +94,6 @@ class QwenVoiceBridge : public Component {
   // Component references
   microphone::MicrophoneSource *mic_source_{nullptr};
   speaker::Speaker *speaker_{nullptr};
-  micro_wake_word::MicroWakeWord *micro_wake_word_{nullptr};
-
   // State
   State state_{STATE_IDLE};
 

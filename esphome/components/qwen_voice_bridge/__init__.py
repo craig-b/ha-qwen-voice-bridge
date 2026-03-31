@@ -9,23 +9,21 @@ from esphome.const import (
 )
 
 CODEOWNERS = ["@craig-b"]
-DEPENDENCIES = ["network", "microphone", "speaker", "micro_wake_word"]
+DEPENDENCIES = ["network", "microphone", "speaker"]
 CONFLICTS_WITH = ["voice_assistant"]
 
 CONF_BRIDGE_HOST = "bridge_host"
 CONF_BRIDGE_PORT = "bridge_port"
 CONF_SATELLITE_ID = "satellite_id"
-CONF_MICRO_WAKE_WORD = "micro_wake_word"
 CONF_ON_CONVERSATION_START = "on_conversation_start"
 CONF_ON_CONVERSATION_END = "on_conversation_end"
 CONF_ON_ERROR = "on_error"
 
 qwen_voice_bridge_ns = cg.esphome_ns.namespace("qwen_voice_bridge")
 QwenVoiceBridge = qwen_voice_bridge_ns.class_("QwenVoiceBridge", cg.Component)
-
-# Import micro_wake_word types for the reference
-micro_wake_word_ns = cg.esphome_ns.namespace("micro_wake_word")
-MicroWakeWord = micro_wake_word_ns.class_("MicroWakeWord", cg.Component)
+StartConversationAction = QwenVoiceBridge.class_(
+    "StartConversationAction", automation.Action
+)
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -35,7 +33,6 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_SATELLITE_ID): cv.string,
         cv.Required(CONF_MICROPHONE): microphone.microphone_source_schema(),
         cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Required(CONF_MICRO_WAKE_WORD): cv.use_id(MicroWakeWord),
         cv.Optional(CONF_ON_CONVERSATION_START): automation.validate_automation(
             single=True
         ),
@@ -45,6 +42,23 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_ON_ERROR): automation.validate_automation(single=True),
     }
 ).extend(cv.COMPONENT_SCHEMA)
+
+# Action: qwen_voice_bridge.start_conversation
+QWEN_VOICE_BRIDGE_START_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.use_id(QwenVoiceBridge),
+    }
+)
+
+
+@automation.register_action(
+    "qwen_voice_bridge.start_conversation",
+    StartConversationAction,
+    QWEN_VOICE_BRIDGE_START_SCHEMA,
+)
+async def start_conversation_action_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg, await cg.get_variable(config[CONF_ID]))
+    return var
 
 
 async def to_code(config):
@@ -60,9 +74,6 @@ async def to_code(config):
 
     spk = await cg.get_variable(config[CONF_SPEAKER])
     cg.add(var.set_speaker(spk))
-
-    mww = await cg.get_variable(config[CONF_MICRO_WAKE_WORD])
-    cg.add(var.set_micro_wake_word(mww))
 
     if CONF_ON_CONVERSATION_START in config:
         await automation.build_automation(
