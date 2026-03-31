@@ -70,7 +70,12 @@ qwen_voice_bridge:
   bridge_host: 192.168.1.50      # HA host IP
   bridge_port: 9100               # mapped add-on port
   satellite_id: "living-room"
-  microphone: i2s_mics            # Voice PE microphone component ID
+  microphone:                      # MicrophoneSource sub-schema
+    microphone: i2s_mics           # Voice PE microphone component ID
+    bits_per_sample: 16
+    gain_factor: 4
+    channels:
+      - 0                          # Left channel (XMOS processed output)
   speaker: announcement_resampling_speaker  # resampling speaker (accepts 16kHz/16-bit/mono)
   micro_wake_word: mww            # Voice PE micro_wake_word component ID
 
@@ -135,11 +140,9 @@ The component extends `esphome::Component` and holds references to the microphon
 
 Audio is captured via `MicrophoneSource`, not the raw `Microphone` directly. `MicrophoneSource` handles the conversion from the Voice PE's native 32-bit stereo I2S to 16-bit mono with configurable gain.
 
-```cpp
-// Created in to_code() Python:
-//   mic_source = MicrophoneSource(mic, bits_per_sample=16, gain_factor=4, passive=false)
-//   mic_source.add_channel(0)  // left channel (XMOS processed output)
+The `MicrophoneSource` is created by ESPHome's `microphone.microphone_source_to_code()` helper in the Python codegen. It requires its own ID and is configured via the `microphone` sub-schema (bits_per_sample, gain_factor, channels).
 
+```cpp
 // In setup():
 this->mic_source_->add_data_callback([this](const std::vector<uint8_t> &data) {
     if (this->state_ == STATE_STREAMING) {
