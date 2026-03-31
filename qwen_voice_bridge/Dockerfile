@@ -10,7 +10,7 @@ COPY src/ ./src/
 RUN npm run build
 RUN npm prune --production
 
-COPY run.sh /
-RUN chmod a+x /run.sh
-
-CMD [ "/run.sh" ]
+COPY run.sh /etc/s6-overlay/s6-rc.d/qwen-voice-bridge/run
+RUN chmod a+x /etc/s6-overlay/s6-rc.d/qwen-voice-bridge/run \
+    && echo "longrun" > /etc/s6-overlay/s6-rc.d/qwen-voice-bridge/type \
+    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/qwen-voice-bridge
