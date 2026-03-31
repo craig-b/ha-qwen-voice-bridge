@@ -1,0 +1,31 @@
+name: "Qwen Voice Bridge"
+description: "End-to-end voice assistant connecting Voice PE satellites to Qwen 3.5 Omni Realtime"
+version: "0.1.0"
+slug: "qwen_voice_bridge"
+url: "https://github.com/craig-b/ha-qwen-voice-bridge"
+arch:
+  - amd64
+  - aarch64
+ports:
+  9100/tcp: 9100
+ports_description:
+  9100/tcp: "Satellite connection port"
+options:
+  dashscope_api_key: ""
+  qwen_model: "qwen3.5-omni-flash-realtime"
+  voice: "Ethan"
+  persona_prompt: "You are a helpful voice assistant for a smart home. Keep responses concise and conversational."
+  satellite_port: 9100
+  conversation_timeout_seconds: 15
+  log_level: "info"
+schema:
+  dashscope_api_key: str
+  qwen_model: list(qwen3.5-omni-plus-realtime|qwen3.5-omni-flash-realtime|qwen3.5-omni-light-realtime)
+  voice: str
+  persona_prompt: str
+  satellite_port: int
+  conversation_timeout_seconds: int(5,120)
+  log_level: list(debug|info|warn|error)
+startup: application
+boot: auto
+homeassistant_api: true

@@ -1,0 +1,19 @@
+{
+  "name": "qwen-voice-bridge",
+  "version": "0.1.0",
+  "description": "Home Assistant add-on bridging Voice PE satellites to Qwen 3.5 Omni Realtime",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.0"
+  }
+}
