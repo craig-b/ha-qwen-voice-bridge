@@ -1,6 +1,6 @@
 name: "Qwen Voice Bridge"
 description: "End-to-end voice assistant connecting Voice PE satellites to Qwen 3.5 Omni Realtime"
-version: "0.1.3"
+version: "0.1.4"
 slug: "qwen_voice_bridge"
 url: "https://github.com/craig-b/ha-qwen-voice-bridge"
 arch:
