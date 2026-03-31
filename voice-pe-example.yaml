@@ -113,6 +113,11 @@ microphone:
     i2s_audio_id: i2s_input
     channel: stereo
 
+audio_dac:
+  - platform: aic3204
+    id: aic3204_dac
+    i2c_id: internal_i2c
+
 speaker:
   - platform: i2s_audio
     id: i2s_audio_speaker
