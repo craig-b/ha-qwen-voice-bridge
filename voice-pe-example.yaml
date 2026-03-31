@@ -1,0 +1,296 @@
+# Qwen Voice Bridge — Voice PE example configuration
+#
+# This is based on the stock home-assistant-voice.yaml from
+# https://github.com/esphome/home-assistant-voice-pe
+#
+# Changes from stock:
+#   - voice_assistant: replaced with qwen_voice_bridge:
+#   - micro_wake_word: on_wake_word_detected simplified (component handles it)
+#   - LED animations wired to qwen_voice_bridge triggers
+#   - Added qwen_voice_bridge external component source
+#
+# To use:
+#   1. Create a new device in ESPHome dashboard
+#   2. Replace its YAML with this file
+#   3. Update substitutions below (wifi, bridge host)
+#   4. Flash the Voice PE via USB (first time) or OTA (subsequent)
+
+substitutions:
+  voice_assist_idle_phase_id: '1'
+  voice_assist_listening_phase_id: '3'
+  voice_assist_replying_phase_id: '5'
+  voice_assist_not_ready_phase_id: '10'
+  voice_assist_error_phase_id: '11'
+  hidden_ssid: "false"
+
+esphome:
+  name: home-assistant-voice
+  friendly_name: Home Assistant Voice
+  name_add_mac_suffix: true
+  min_version: 2026.3.0
+  on_boot:
+    priority: 375
+    then:
+      - script.execute: control_leds
+      - delay: 1s
+      - switch.turn_on: internal_speaker_amp
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+wifi:
+  id: wifi_id
+  fast_connect: ${hidden_ssid}
+  on_connect:
+    - script.execute: control_leds
+  on_disconnect:
+    - script.execute: control_leds
+
+api:
+
+logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+
+ota:
+  - platform: esphome
+
+# --- External components ---
+
+external_components:
+  # Voice PE hardware support
+  - source:
+      type: git
+      url: https://github.com/esphome/home-assistant-voice-pe
+      ref: dev
+    components:
+      - voice_kit
+  # Qwen Voice Bridge satellite component
+  - source:
+      type: git
+      url: https://github.com/craig-b/ha-qwen-voice-bridge
+    components:
+      - qwen_voice_bridge
+    refresh: 1d
+
+# --- Audio hardware ---
+
+i2s_audio:
+  - id: i2s_output
+    i2s_lrclk_pin:
+      number: GPIO7
+    i2s_bclk_pin:
+      number: GPIO8
+  - id: i2s_input
+    i2s_lrclk_pin:
+      number: GPIO14
+    i2s_bclk_pin:
+      number: GPIO13
+
+microphone:
+  - platform: i2s_audio
+    id: i2s_mics
+    i2s_din_pin: GPIO15
+    adc_type: external
+    pdm: false
+    sample_rate: 16000
+    bits_per_sample: 32bit
+    i2s_mode: secondary
+    i2s_audio_id: i2s_input
+    channel: stereo
+
+speaker:
+  - platform: i2s_audio
+    id: i2s_audio_speaker
+    sample_rate: 48000
+    i2s_mode: secondary
+    i2s_dout_pin: GPIO10
+    bits_per_sample: 32bit
+    i2s_audio_id: i2s_output
+    dac_type: external
+    channel: stereo
+    timeout: never
+    buffer_duration: 100ms
+    audio_dac: aic3204_dac
+  - platform: mixer
+    id: mixing_speaker
+    output_speaker: i2s_audio_speaker
+    num_channels: 2
+    task_stack_in_psram: true
+    source_speakers:
+      - id: announcement_mixing_input
+        timeout: never
+      - id: media_mixing_input
+        timeout: never
+  - platform: resampler
+    id: announcement_resampling_speaker
+    output_speaker: announcement_mixing_input
+    sample_rate: 48000
+    bits_per_sample: 16
+  - platform: resampler
+    id: media_resampling_speaker
+    output_speaker: media_mixing_input
+    sample_rate: 48000
+    bits_per_sample: 16
+
+# --- Wake word ---
+
+micro_wake_word:
+  id: mww
+  microphone:
+    microphone: i2s_mics
+    channels: 1
+    gain_factor: 4
+  stop_after_detection: false
+  models:
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
+      id: okay_nabu
+    - model: hey_jarvis
+      id: hey_jarvis
+    - model: hey_mycroft
+      id: hey_mycroft
+  vad:
+  # NOTE: on_wake_word_detected is intentionally omitted here.
+  # The qwen_voice_bridge component registers its own callback
+  # on the micro_wake_word trigger to start conversations.
+
+# --- Qwen Voice Bridge ---
+# Replace bridge_host with your Home Assistant IP address.
+
+qwen_voice_bridge:
+  id: qwen_bridge
+  bridge_host: "192.168.1.XXX"   # <-- CHANGE THIS to your HA IP
+  bridge_port: 9100
+  satellite_id: "living-room"    # <-- CHANGE THIS to your room name
+  microphone:
+    microphone: i2s_mics
+    gain_factor: 4
+  speaker: announcement_resampling_speaker
+  micro_wake_word: mww
+  on_conversation_start:
+    - lambda: id(voice_assistant_phase) = ${voice_assist_listening_phase_id};
+    - script.execute: control_leds
+  on_conversation_end:
+    - lambda: id(voice_assistant_phase) = ${voice_assist_idle_phase_id};
+    - script.execute: control_leds
+  on_error:
+    - lambda: id(voice_assistant_phase) = ${voice_assist_error_phase_id};
+    - script.execute: control_leds
+    - delay: 3s
+    - lambda: id(voice_assistant_phase) = ${voice_assist_idle_phase_id};
+    - script.execute: control_leds
+
+# --- Voice PE hardware (DAC, amp, buttons, LEDs) ---
+
+voice_kit:
+  i2c_bus: i2c_bus
+  reset_pin: GPIO2
+  firmware:
+    url: https://github.com/esphome/home-assistant-voice-pe/raw/dev/xmos/v5/firmware.bin
+    version: "5"
+
+i2c:
+  id: i2c_bus
+  sda: GPIO5
+  scl: GPIO6
+
+switch:
+  - platform: voice_kit
+    id: internal_speaker_amp
+    name: Speaker amplifier
+    restore_mode: ALWAYS_ON
+
+binary_sensor:
+  - platform: voice_kit
+    id: jack_plugged
+    name: Headphone jack
+
+  # Center button — could be used for manual trigger in future
+  - platform: voice_kit
+    id: center_button
+    name: Center button
+
+  # Hardware mute switch
+  - platform: voice_kit
+    id: mute_switch
+    name: Mute switch
+    on_press:
+      - micro_wake_word.stop:
+      - script.execute: control_leds
+    on_release:
+      - micro_wake_word.start:
+      - script.execute: control_leds
+
+# --- LED ring ---
+
+globals:
+  - id: voice_assistant_phase
+    type: int
+    initial_value: ${voice_assist_not_ready_phase_id}
+
+light:
+  - platform: voice_kit
+    id: led_ring
+    name: LED Ring
+    icon: "mdi:circle-outline"
+    default_transition_length: 0ms
+    effects:
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 500ms
+          update_interval: 500ms
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 200ms
+          update_interval: 200ms
+      - addressable_lambda:
+          name: "Listening Spin"
+          update_interval: 60ms
+          lambda: |-
+            static int pos = 0;
+            for (int i = 0; i < it.size(); i++) {
+              int distance = (i - pos + it.size()) % it.size();
+              if (distance < 3) {
+                it[i] = Color(0, 100, 255);
+              } else {
+                it[i] = Color(0, 0, 0);
+              }
+            }
+            pos = (pos + 1) % it.size();
+
+script:
+  - id: control_leds
+    then:
+      - lambda: |-
+          int phase = id(voice_assistant_phase);
+          auto light_call = id(led_ring).turn_on();
+          if (!id(wifi_id).is_connected() || phase == ${voice_assist_not_ready_phase_id}) {
+            light_call.set_rgb(1.0, 0.0, 0.0);
+            light_call.set_effect("Slow Pulse");
+          } else if (phase == ${voice_assist_idle_phase_id}) {
+            id(led_ring).turn_off().perform();
+            return;
+          } else if (phase == ${voice_assist_listening_phase_id}) {
+            light_call.set_effect("Listening Spin");
+          } else if (phase == ${voice_assist_replying_phase_id}) {
+            light_call.set_rgb(0.0, 1.0, 0.5);
+            light_call.set_effect("Slow Pulse");
+          } else if (phase == ${voice_assist_error_phase_id}) {
+            light_call.set_rgb(1.0, 0.0, 0.0);
+            light_call.set_effect("Fast Pulse");
+          }
+          light_call.perform();
