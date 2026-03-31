@@ -45,13 +45,13 @@ HA's Assist pipeline (STT, conversation agent, TTS) is not involved at any point
 
 ### 2.1 Voice PE satellite (ESPHome custom component)
 
-The Voice Preview Edition hardware is an ESP32-S3 with an XMOS XU316 audio frontend. The XMOS chip performs hardware-level echo cancellation, beamforming, and noise suppression. Processed audio arrives at the ESP32-S3 as PCM 16-bit signed little-endian, 16kHz, mono — which is exactly the format Qwen Realtime expects.
+The Voice Preview Edition hardware is an ESP32-S3 (16MB flash, 8MB PSRAM) with an XMOS XU316 audio frontend. The XMOS chip performs hardware-level echo cancellation, beamforming, and noise suppression. Processed audio arrives at the ESP32-S3 via I2S as 16kHz, 32-bit, stereo — the ESPHome `MicrophoneSource` layer converts this to 16-bit mono, which is the format Qwen Realtime expects (PCM 16-bit signed little-endian, 16kHz, mono).
 
-A custom ESPHome component (`qwen_voice_bridge`) replaces the stock `voice_assistant` component. It reuses the existing microWakeWord component for on-device wake word detection.
+A custom ESPHome component (`qwen_voice_bridge`) replaces the stock `voice_assistant` component. It reuses the existing `micro_wake_word` component for on-device wake word detection.
 
 #### 2.1.1 Behaviour
 
-1. **Idle state** — microWakeWord listens for the wake word. No network connection to the bridge.
+1. **Idle state** — `micro_wake_word` listens for the wake word. No network connection to the bridge.
 2. **Wake word detected** — the component opens a TCP connection to the bridge add-on at the configured `host:port`.
 3. **Handshake** — sends a `HELLO` frame containing the satellite ID (configured string, e.g. `"living-room"`).
 4. **Streaming** — mic audio flows to the bridge as `AUDIO` frames. Audio from the bridge plays through the speaker. This is bidirectional and concurrent.
@@ -62,7 +62,7 @@ A custom ESPHome component (`qwen_voice_bridge`) replaces the stock `voice_assis
 
 ```yaml
 external_components:
-  - source: github://your-org/qwen-voice-bridge
+  - source: github://craig-b/ha-qwen-voice-bridge
     components: [qwen_voice_bridge]
 
 qwen_voice_bridge:
@@ -70,8 +70,9 @@ qwen_voice_bridge:
   bridge_host: 192.168.1.50      # HA host IP
   bridge_port: 9100               # mapped add-on port
   satellite_id: "living-room"
-  microphone: xmos_microphone     # existing mic component ID
-  speaker: i2s_speaker            # existing speaker component ID
+  microphone: i2s_mics            # Voice PE microphone component ID
+  speaker: announcement_resampling_speaker  # resampling speaker (accepts 16kHz/16-bit/mono)
+  micro_wake_word: mww            # Voice PE micro_wake_word component ID
 
   # Automation triggers
   on_conversation_start:
@@ -92,16 +93,181 @@ qwen_voice_bridge:
         id: led_ring
 ```
 
-#### 2.1.3 Implementation notes
+**Speaker selection note:** The Voice PE's audio output chain is:
 
-- The component is written in C++ as an ESPHome external component.
-- It registers as a listener on the microWakeWord component's `on_wake_word_detected` trigger.
-- Audio capture uses the existing ESPHome microphone HAL — the `microphone` config reference provides the audio source.
-- Audio playback uses the existing ESPHome speaker HAL.
-- The TCP client is non-blocking, using ESPHome's async networking primitives (`AsyncClient` from ESPAsyncTCP or the Arduino WiFiClient with task-based reads).
-- Audio is captured and sent in chunks of approximately 100ms (3200 bytes at 16kHz/16-bit/mono).
-- Received audio chunks are written to the speaker ring buffer as they arrive — no buffering/reassembly needed.
-- The component exposes an `is_active` binary sensor for use in automations.
+```
+announcement_resampling_speaker (16kHz/16-bit/mono accepted, resampled to 48kHz)
+  → mixing_speaker (mixes announcement + media streams)
+    → i2s_audio_speaker (48kHz/32-bit/stereo hardware DAC)
+```
+
+The component writes to `announcement_resampling_speaker` because it accepts the same 16kHz/16-bit/mono format that Qwen outputs. Writing directly to `i2s_audio_speaker` would require manual resampling to 48kHz/32-bit/stereo.
+
+#### 2.1.3 File structure
+
+The component lives in this repository under `esphome/components/qwen_voice_bridge/`:
+
+```
+esphome/components/qwen_voice_bridge/
+├── __init__.py                  # ESPHome config schema + code generation
+├── qwen_voice_bridge.h          # C++ header: class, state enum, members
+└── qwen_voice_bridge.cpp        # C++ implementation
+```
+
+Referenced from ESPHome YAML via:
+
+```yaml
+external_components:
+  - source: github://craig-b/ha-qwen-voice-bridge
+    components: [qwen_voice_bridge]
+    refresh: 1d
+```
+
+ESPHome resolves this to the `esphome/components/qwen_voice_bridge/` directory within the repository.
+
+#### 2.1.4 Implementation details
+
+##### Component class
+
+The component extends `esphome::Component` and holds references to the microphone, speaker, and micro_wake_word components. It implements `setup()`, `loop()`, and `dump_config()`.
+
+##### Microphone capture
+
+Audio is captured via `MicrophoneSource`, not the raw `Microphone` directly. `MicrophoneSource` handles the conversion from the Voice PE's native 32-bit stereo I2S to 16-bit mono with configurable gain.
+
+```cpp
+// Created in to_code() Python:
+//   mic_source = MicrophoneSource(mic, bits_per_sample=16, gain_factor=4, passive=false)
+//   mic_source.add_channel(0)  // left channel (XMOS processed output)
+
+// In setup():
+this->mic_source_->add_data_callback([this](const std::vector<uint8_t> &data) {
+    if (this->state_ == STATE_STREAMING) {
+        this->mic_ring_buffer_->write((void *) data.data(), data.size());
+    }
+});
+```
+
+Audio accumulates in a `RingBuffer`. In `loop()`, the buffer is drained in chunks and sent as `AUDIO` frames over TCP.
+
+##### Speaker output
+
+Received `AUDIO` frames from the bridge contain raw 16kHz/16-bit/mono PCM. The component writes this directly to the speaker via `speaker->play(data, len)`. The speaker's internal ring buffer handles flow control — `play()` returns the number of bytes actually consumed. Unconsumed bytes are retained and retried on the next `loop()` iteration.
+
+```cpp
+// In loop(), when audio data received from bridge:
+size_t written = this->speaker_->play(this->speaker_buffer_, this->speaker_buffer_size_);
+if (written > 0) {
+    memmove(this->speaker_buffer_, this->speaker_buffer_ + written,
+            this->speaker_buffer_size_ - written);
+    this->speaker_buffer_size_ -= written;
+}
+```
+
+##### Wake word integration
+
+The component registers a callback on the `micro_wake_word` component's wake word detection trigger:
+
+```cpp
+this->micro_wake_word_->get_wake_word_detected_trigger()->add_on_trigger_callback(
+    [this](const std::string &wake_word) {
+        if (this->state_ == STATE_IDLE) {
+            this->start_conversation_();
+        }
+    }
+);
+```
+
+When a conversation is active, wake word detections are ignored.
+
+##### TCP networking
+
+The component uses ESPHome's BSD socket abstraction (`esphome/components/socket/socket.h`):
+
+```cpp
+#include "esphome/components/socket/socket.h"
+
+// In start_conversation_():
+this->socket_ = esphome::socket::socket(AF_INET, SOCK_STREAM, 0);
+this->socket_->setblocking(false);
+
+struct sockaddr_in addr;
+esphome::socket::set_sockaddr(&addr, sizeof(addr), this->bridge_host_.c_str(), this->bridge_port_);
+int err = this->socket_->connect((struct sockaddr *)&addr, sizeof(addr));
+// err == -1 && errno == EINPROGRESS is expected for non-blocking connect
+
+// In loop():
+ssize_t bytes_read = this->socket_->read(this->recv_buffer_, sizeof(this->recv_buffer_));
+// bytes_read == -1 && errno == EAGAIN means no data available (normal)
+
+ssize_t bytes_written = this->socket_->write(this->send_buffer_, this->send_buffer_size_);
+```
+
+All socket operations are non-blocking. Connection progress, reads, and writes are polled in `loop()`. The `loop()` method must remain fast (<1ms) to avoid blocking the ESPHome main loop.
+
+##### State machine
+
+```cpp
+enum State : uint8_t {
+    STATE_IDLE,              // Waiting for wake word, no TCP connection
+    STATE_CONNECTING,        // TCP connect in progress (non-blocking)
+    STATE_SENDING_HELLO,     // Connected, sending HELLO frame
+    STATE_STREAMING,         // Bidirectional audio streaming
+    STATE_ENDING,            // Received END/ERROR, draining speaker, closing
+};
+```
+
+Transitions:
+- `IDLE` → `CONNECTING`: wake word detected
+- `CONNECTING` → `SENDING_HELLO`: TCP connect succeeds (socket becomes writable)
+- `CONNECTING` → `IDLE`: TCP connect fails or 5-second timeout
+- `SENDING_HELLO` → `STREAMING`: HELLO frame fully sent
+- `STREAMING` → `ENDING`: received `END` or `ERROR` frame from bridge
+- `STREAMING` → `IDLE`: TCP disconnect detected (read returns 0)
+- `ENDING` → `IDLE`: speaker drained or 2-second drain timeout
+
+##### Frame encoding/decoding
+
+Same binary protocol as the bridge side (section 3.1):
+
+```
+┌──────────┬───────────────┬─────────────────────────┐
+│ Type (1) │ Length (2, BE) │ Payload (0..65535 bytes) │
+└──────────┴───────────────┘─────────────────────────┘
+```
+
+The component maintains a receive buffer for incremental frame parsing. Partial frames are retained across `loop()` iterations.
+
+##### Buffer sizes
+
+| Buffer | Size | Purpose |
+|--------|------|---------|
+| Mic ring buffer | 16384 bytes (~500ms audio) | Accumulates mic PCM between loop() drains |
+| Speaker buffer | 8192 bytes (~250ms audio) | Holds received PCM pending speaker consumption |
+| TCP receive buffer | 4096 bytes | Raw bytes from socket before frame parsing |
+| TCP send buffer | 3203 bytes | One AUDIO frame: 3-byte header + 3200-byte payload (100ms) |
+
+##### Automation triggers
+
+Three ESPHome `Trigger<>` instances exposed for YAML automations:
+
+| Trigger | Fires when |
+|---------|-----------|
+| `on_conversation_start` | State transitions to `STREAMING` (HELLO sent, bridge accepted) |
+| `on_conversation_end` | State transitions to `IDLE` after normal `END` frame |
+| `on_error` | State transitions to `IDLE` after `ERROR` frame or TCP failure |
+
+##### Dependencies
+
+The component declares these ESPHome dependencies in `__init__.py`:
+
+```python
+DEPENDENCIES = ["network"]
+AUTO_LOAD = []
+CONFLICTS_WITH = ["voice_assistant"]
+```
+
+It conflicts with `voice_assistant` because both components would try to claim the microphone and speaker. Only one can be active.
 
 
 ### 2.2 Bridge add-on (TypeScript / Node.js)
