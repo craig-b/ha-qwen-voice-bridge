@@ -33,7 +33,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_BRIDGE_HOST): cv.string,
         cv.Optional(CONF_BRIDGE_PORT, default=9100): cv.port,
         cv.Required(CONF_SATELLITE_ID): cv.string,
-        cv.Required(CONF_MICROPHONE): microphone.microphone_source_schema,
+        cv.Required(CONF_MICROPHONE): microphone.microphone_source_schema(),
         cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
         cv.Required(CONF_MICRO_WAKE_WORD): cv.use_id(MicroWakeWord),
         cv.Optional(CONF_ON_CONVERSATION_START): automation.validate_automation(
