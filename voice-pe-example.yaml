@@ -54,7 +54,8 @@ psram:
 
 wifi:
   id: wifi_id
-  fast_connect: ${hidden_ssid}
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   on_connect:
     - script.execute: control_leds
   on_disconnect:
