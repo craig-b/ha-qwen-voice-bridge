@@ -84,9 +84,10 @@ external_components:
   - source:
       type: git
       url: https://github.com/craig-b/ha-qwen-voice-bridge
+      ref: main
     components:
       - qwen_voice_bridge
-    refresh: 1d
+    refresh: 0s
 
 # --- Audio hardware ---
 
