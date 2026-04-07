@@ -5,19 +5,18 @@ slug: "qwen_voice_bridge"
 url: "https://github.com/craig-b/ha-qwen-voice-bridge"
 arch:
   - amd64
+ingress: true
+ingress_port: 9101
 ports:
   9100/tcp: 9100
-  9101/tcp: 9101
 ports_description:
   9100/tcp: "Satellite connection port"
-  9101/tcp: "Web client port"
 options:
   dashscope_api_key: ""
   qwen_model: "qwen3.5-omni-flash-realtime"
   voice: "Ethan"
   persona_prompt: "You are a helpful voice assistant for a smart home. Keep responses concise and conversational."
   satellite_port: 9100
-  web_port: 9101
   conversation_timeout_seconds: 15
   log_level: "info"
 schema:
@@ -26,7 +25,6 @@ schema:
   voice: str
   persona_prompt: str
   satellite_port: int
-  web_port: int
   conversation_timeout_seconds: int(5,120)
   log_level: list(debug|info|warn|error)
 startup: application

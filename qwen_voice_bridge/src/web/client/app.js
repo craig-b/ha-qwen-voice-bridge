@@ -10,7 +10,10 @@ const errorBox = document.getElementById("error-box");
 
 function wsUrl() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${location.host}`;
+  // Under HA ingress the page is served at /api/hassio_ingress/<token>/
+  // The WebSocket upgrade must go through the same path prefix.
+  const basePath = location.pathname.replace(/\/[^/]*$/, "");
+  return `${proto}//${location.host}${basePath}`;
 }
 
 client.addEventListener("statuschange", (ev) => {
