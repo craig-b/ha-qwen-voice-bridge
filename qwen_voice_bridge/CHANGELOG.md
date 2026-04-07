@@ -1,3 +1,7 @@
+## 0.1.8
+
+- Fix WebSocket URL missing trailing slash for ingress proxy
+
 ## 0.1.7
 
 - Fix WebSocket handling for ingress proxy (use noServer mode)
