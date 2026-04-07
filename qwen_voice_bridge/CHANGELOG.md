@@ -1,3 +1,8 @@
+## 0.1.7
+
+- Fix WebSocket handling for ingress proxy (use noServer mode)
+- Add request logging for web server
+
 ## 0.1.6
 
 - Enable HA ingress for web UI (Open Web UI button, Nabu Casa support)

@@ -30,8 +30,20 @@ export class WebServer {
     this.httpServer = http.createServer((req, res) =>
       this.handleHttp(req, res)
     );
-    this.wss = new WebSocketServer({ server: this.httpServer });
+
+    // Use noServer mode for reliable WebSocket handling behind the HA ingress proxy
+    this.wss = new WebSocketServer({ noServer: true });
     this.wss.on("connection", (ws, req) => this.onWsConnection(ws, req));
+
+    this.httpServer.on("upgrade", (req, socket, head) => {
+      logger.info("web.ws.upgrade", {
+        url: req.url,
+        remote_ip: req.socket.remoteAddress,
+      });
+      this.wss.handleUpgrade(req, socket, head, (ws) => {
+        this.wss.emit("connection", ws, req);
+      });
+    });
   }
 
   start(): Promise<void> {
@@ -63,6 +75,12 @@ export class WebServer {
   private handleHttp(req: http.IncomingMessage, res: http.ServerResponse): void {
     let urlPath = req.url || "/";
 
+    logger.info("web.http.request", {
+      method: req.method,
+      url: urlPath,
+      remote_ip: req.socket.remoteAddress,
+    });
+
     // Strip query string
     const qIdx = urlPath.indexOf("?");
     if (qIdx !== -1) urlPath = urlPath.slice(0, qIdx);
@@ -83,6 +101,7 @@ export class WebServer {
 
     fs.readFile(filePath, (err, data) => {
       if (err) {
+        logger.info("web.http.not_found", { path: urlPath });
         res.writeHead(404);
         res.end("Not found");
         return;
