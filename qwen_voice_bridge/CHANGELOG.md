@@ -1,8 +1,11 @@
+## 0.1.6
+
+- Enable HA ingress for web UI (Open Web UI button, Nabu Casa support)
+
 ## 0.1.5
 
-- Add web audio client for browser-based testing (port 9101)
+- Add web audio client for browser-based testing
 - Add pluggable transport layer (TCP + WebSocket)
-- Add `web_port` configuration option
 
 ## 0.1.4
 
