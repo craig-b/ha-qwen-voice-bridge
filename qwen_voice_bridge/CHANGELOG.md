@@ -1,3 +1,7 @@
+## 0.1.9
+
+- Fix swallowed errors in Qwen session: log connection, close codes, and reconnect failures at visible levels
+
 ## 0.1.8
 
 - Fix WebSocket URL missing trailing slash for ingress proxy

@@ -58,7 +58,7 @@ export class QwenSession extends EventEmitter {
       let resolved = false;
 
       this.ws.on("open", () => {
-        logger.debug("qwen.ws.connected", { satellite_id: this.satelliteId });
+        logger.info("qwen.ws.connected", { satellite_id: this.satelliteId, url });
       });
 
       this.ws.on("message", (raw) => {
@@ -98,8 +98,12 @@ export class QwenSession extends EventEmitter {
         }
       });
 
-      this.ws.on("close", () => {
-        logger.debug("qwen.ws.closed", { satellite_id: this.satelliteId });
+      this.ws.on("close", (code, reason) => {
+        logger.warn("qwen.ws.closed", {
+          satellite_id: this.satelliteId,
+          code,
+          reason: reason?.toString() || "",
+        });
         if (!this.closed) {
           this.attemptReconnect();
         }
@@ -123,7 +127,7 @@ export class QwenSession extends EventEmitter {
 
   private handleEvent(event: Record<string, unknown>): void {
     const eventType = event.type as string;
-    logger.debug("qwen.event", { satellite_id: this.satelliteId, type: eventType });
+    logger.info("qwen.event", { satellite_id: this.satelliteId, type: eventType });
 
     switch (eventType) {
       case "response.audio.delta": {
@@ -228,7 +232,12 @@ export class QwenSession extends EventEmitter {
 
     try {
       await this.connect();
-    } catch {
+    } catch (err) {
+      logger.error("qwen.reconnect.failed", {
+        satellite_id: this.satelliteId,
+        attempt: this.reconnectAttempts,
+        message: err instanceof Error ? err.message : String(err),
+      });
       this.attemptReconnect();
     }
   }
