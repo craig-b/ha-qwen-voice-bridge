@@ -99,11 +99,17 @@ export class QwenSession extends EventEmitter {
       });
 
       this.ws.on("close", (code, reason) => {
+        const reasonStr = reason?.toString() || "";
         logger.warn("qwen.ws.closed", {
           satellite_id: this.satelliteId,
           code,
-          reason: reason?.toString() || "",
+          reason: reasonStr,
         });
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`DashScope closed connection (code ${code}${reasonStr ? `: ${reasonStr}` : ""})`));
+          return;
+        }
         if (!this.closed) {
           this.attemptReconnect();
         }
@@ -210,11 +216,19 @@ export class QwenSession extends EventEmitter {
     this.ws.send(JSON.stringify(event));
   }
 
+  private lastError: string = "";
+
   private async attemptReconnect(): Promise<void> {
     if (this.closed || this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       if (!this.closed) {
-        logger.error("qwen.reconnect.exhausted", { satellite_id: this.satelliteId });
-        this.emit("error", new Error("Qwen WebSocket reconnection failed"));
+        const msg = this.lastError
+          ? `Qwen connection failed: ${this.lastError}`
+          : "Qwen connection failed after retries";
+        logger.error("qwen.reconnect.exhausted", {
+          satellite_id: this.satelliteId,
+          message: msg,
+        });
+        this.emit("error", new Error(msg));
       }
       this.emit("closed");
       return;
@@ -233,10 +247,11 @@ export class QwenSession extends EventEmitter {
     try {
       await this.connect();
     } catch (err) {
+      this.lastError = err instanceof Error ? err.message : String(err);
       logger.error("qwen.reconnect.failed", {
         satellite_id: this.satelliteId,
         attempt: this.reconnectAttempts,
-        message: err instanceof Error ? err.message : String(err),
+        message: this.lastError,
       });
       this.attemptReconnect();
     }

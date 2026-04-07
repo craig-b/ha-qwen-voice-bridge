@@ -18,16 +18,22 @@ function wsUrl() {
   return `${proto}//${location.host}${basePath}`;
 }
 
+const STATUS_LABELS = {
+  disconnected: "Disconnected",
+  connecting: "Connecting...",
+  connected: "Connected — waiting for Qwen...",
+  active: "Listening",
+};
+
 client.addEventListener("statuschange", (ev) => {
   const status = ev.detail;
   statusDot.className = `dot ${status}`;
-  statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+  statusText.textContent = STATUS_LABELS[status] || status;
   btn.textContent = status === "disconnected" ? "Connect" : "Disconnect";
   btn.disabled = status === "connecting";
   if (status === "disconnected") {
     levelBar.style.width = "0%";
   }
-  errorBox.hidden = true;
 });
 
 client.addEventListener("audiolevel", (ev) => {

@@ -174,6 +174,7 @@ export class BridgeClient extends EventTarget {
     const { type, payload } = decodeFrame(data);
     switch (type) {
       case FrameType.AUDIO:
+        if (this.#status === "connected") this.#setStatus("active");
         this.#playAudio(payload);
         break;
       case FrameType.END:
