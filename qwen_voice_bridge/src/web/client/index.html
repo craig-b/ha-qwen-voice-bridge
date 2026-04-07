@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qwen Voice Bridge</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e1e2e6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #1a1d27;
+      border-radius: 12px;
+      padding: 2rem;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-align: center;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      justify-content: center;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    .dot.connected { background: #22c55e; }
+    .dot.connecting { background: #eab308; }
+    .dot.disconnected { background: #555; }
+    .level-track {
+      height: 6px;
+      background: #2a2d3a;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .level-fill {
+      height: 100%;
+      width: 0%;
+      background: #3b82f6;
+      border-radius: 3px;
+      transition: width 60ms linear;
+    }
+    button {
+      padding: 0.65rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #3b82f6;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover { background: #2563eb; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .error {
+      background: #3b1520;
+      color: #f87171;
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Qwen Voice Bridge</h1>
+
+    <div class="status">
+      <span id="status-dot" class="dot disconnected"></span>
+      <span id="status-text">Disconnected</span>
+    </div>
+
+    <div class="level-track">
+      <div id="level-bar" class="level-fill"></div>
+    </div>
+
+    <button id="connect-btn">Connect</button>
+
+    <div id="error-box" class="error" hidden></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci --production=false
 COPY src/ ./src/
 RUN npm run build
+COPY src/web/client/ ./dist/web/client/
 RUN npm prune --production
 
 RUN mkdir -p \

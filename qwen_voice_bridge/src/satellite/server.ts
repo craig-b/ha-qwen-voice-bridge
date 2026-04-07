@@ -2,6 +2,7 @@ import net from "net";
 import { BridgeConfig } from "../config";
 import { HomeAssistantApi } from "../ha/api";
 import { SatelliteConnection } from "./connection";
+import { TcpTransport } from "./tcp-transport";
 import { logger } from "../logger";
 
 export class SatelliteServer {
@@ -30,17 +31,17 @@ export class SatelliteServer {
   }
 
   private onConnection(socket: net.Socket): void {
-    const conn = new SatelliteConnection(socket, this.config, this.haApi);
+    const transport = new TcpTransport(socket);
+    const conn = new SatelliteConnection(transport, this.config, this.haApi);
     this.connections.add(conn);
 
-    socket.on("close", () => {
+    transport.on("close", () => {
       this.connections.delete(conn);
     });
   }
 
   stop(): Promise<void> {
     return new Promise((resolve) => {
-      // Close all active connections
       for (const conn of this.connections) {
         conn.close();
       }

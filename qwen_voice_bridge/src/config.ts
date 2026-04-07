@@ -6,6 +6,7 @@ export interface BridgeConfig {
   voice: string;
   personaPrompt: string;
   satellitePort: number;
+  webPort: number;
   conversationTimeoutSeconds: number;
   logLevel: LogLevel;
   supervisorToken: string;
@@ -25,6 +26,7 @@ export function loadConfig(): BridgeConfig {
       process.env.PERSONA_PROMPT ||
       "You are a helpful voice assistant for a smart home. Keep responses concise and conversational.",
     satellitePort: parseInt(process.env.SATELLITE_PORT || "9100", 10),
+    webPort: parseInt(process.env.WEB_PORT || "9101", 10),
     conversationTimeoutSeconds: parseInt(process.env.CONVERSATION_TIMEOUT || "15", 10),
     logLevel: (process.env.LOG_LEVEL as LogLevel) || "info",
     supervisorToken,

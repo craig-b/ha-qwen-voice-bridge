@@ -2,6 +2,7 @@ import { loadConfig } from "./config";
 import { setLogLevel, logger } from "./logger";
 import { HomeAssistantApi } from "./ha/api";
 import { SatelliteServer } from "./satellite/server";
+import { WebServer } from "./web/server";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -10,21 +11,28 @@ async function main(): Promise<void> {
   logger.info("bridge.starting", {
     model: config.qwenModel,
     voice: config.voice,
-    port: config.satellitePort,
+    satellite_port: config.satellitePort,
+    web_port: config.webPort,
     timeout_s: config.conversationTimeoutSeconds,
   });
 
   const haApi = new HomeAssistantApi(config);
   const server = new SatelliteServer(config, haApi);
+  const webServer = new WebServer(config, haApi);
 
   await server.start();
+  await webServer.start();
 
-  logger.info("bridge.started", { port: config.satellitePort });
+  logger.info("bridge.started", {
+    satellite_port: config.satellitePort,
+    web_port: config.webPort,
+  });
 
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("bridge.stopping");
     await server.stop();
+    await webServer.stop();
     process.exit(0);
   };
 

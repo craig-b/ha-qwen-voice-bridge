@@ -1,10 +1,10 @@
-import net from "net";
 import { BridgeConfig } from "../config";
 import { FrameDecoder, FrameType, FrameTypeValue, encodeFrame } from "./protocol";
 import { QwenSession } from "../qwen/session";
 import { HomeAssistantApi } from "../ha/api";
 import { discoverExposedEntities, buildSystemPrompt } from "../ha/entities";
 import { logger } from "../logger";
+import { Transport } from "./transport";
 
 export type ConnectionState =
   | "CONNECTED"
@@ -16,7 +16,7 @@ export type ConnectionState =
 export class SatelliteConnection {
   private state: ConnectionState = "CONNECTED";
   private satelliteId = "unknown";
-  private readonly socket: net.Socket;
+  private readonly transport: Transport;
   private readonly config: BridgeConfig;
   private readonly haApi: HomeAssistantApi;
   private readonly decoder = new FrameDecoder();
@@ -25,11 +25,11 @@ export class SatelliteConnection {
   private helloTimer: ReturnType<typeof setTimeout>;
   private readonly remoteIp: string;
 
-  constructor(socket: net.Socket, config: BridgeConfig, haApi: HomeAssistantApi) {
-    this.socket = socket;
+  constructor(transport: Transport, config: BridgeConfig, haApi: HomeAssistantApi) {
+    this.transport = transport;
     this.config = config;
     this.haApi = haApi;
-    this.remoteIp = socket.remoteAddress || "unknown";
+    this.remoteIp = transport.remoteAddress;
 
     // HELLO must arrive within 2 seconds
     this.helloTimer = setTimeout(() => {
@@ -39,9 +39,9 @@ export class SatelliteConnection {
       }
     }, 2000);
 
-    this.socket.on("data", (data) => this.onData(data));
-    this.socket.on("close", () => this.onDisconnect());
-    this.socket.on("error", (err) => {
+    this.transport.on("data", (data) => this.onData(data));
+    this.transport.on("close", () => this.onDisconnect());
+    this.transport.on("error", (err) => {
       logger.warn("satellite.socket_error", {
         satellite_id: this.satelliteId,
         message: err.message,
@@ -167,8 +167,8 @@ export class SatelliteConnection {
   }
 
   private sendFrame(type: FrameTypeValue, payload?: Buffer): void {
-    if (this.socket.writable) {
-      this.socket.write(encodeFrame(type, payload));
+    if (this.transport.writable) {
+      this.transport.write(encodeFrame(type, payload));
     }
   }
 
@@ -181,8 +181,8 @@ export class SatelliteConnection {
     this.qwenSession?.close();
     this.decoder.reset();
 
-    if (!this.socket.destroyed) {
-      this.socket.destroy();
+    if (!this.transport.destroyed) {
+      this.transport.destroy();
     }
 
     logger.info("satellite.disconnected", {
